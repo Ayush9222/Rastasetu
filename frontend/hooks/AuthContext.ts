@@ -35,15 +35,9 @@ export const [AuthProvider, useAuth] = createContextHook<AuthContextType>(
   () => {
     const [user, setUser] = useState<User | null>(null);
     const [isLoading, setIsLoading] = useState(true);
-    const [authError, setAuthError] = useState<string | null>(null);
 
     const syncUserWithBackend = useCallback(async (firebaseUser: any) => {
       try {
-        // Get fresh ID token
-        const idToken = await getIdToken(firebaseUser, true);
-        await AsyncStorage.setItem("firebaseToken", idToken);
-
-        // Sync with backend
         const backendResponse = await apiRequest("/auth/user", {
           method: "POST",
           body: {
@@ -52,7 +46,6 @@ export const [AuthProvider, useAuth] = createContextHook<AuthContextType>(
           },
         });
 
-        // Update local user state with merged data
         const userData: User = {
           id: firebaseUser.uid,
           email: firebaseUser.email,
@@ -64,101 +57,52 @@ export const [AuthProvider, useAuth] = createContextHook<AuthContextType>(
         };
 
         setUser(userData);
-        setAuthError(null);
       } catch (error) {
         console.error("Error syncing with backend:", error);
-        setAuthError("Error syncing user data");
+        // If backend sync fails, logout the user to prevent inconsistent state
+        await signOut(auth);
       }
     }, []);
 
     useEffect(() => {
-      console.log("Setting up auth state listener");
       const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
-        setIsLoading(true);
-        try {
-          if (firebaseUser) {
-            await syncUserWithBackend(firebaseUser);
-          } else {
-            setUser(null);
-            await AsyncStorage.removeItem("firebaseToken");
-          }
-        } catch (error) {
-          console.error("Auth state change error:", error);
-          setAuthError("Authentication error");
-        } finally {
-          setIsLoading(false);
+        if (firebaseUser) {
+          await syncUserWithBackend(firebaseUser);
+        } else {
+          setUser(null);
         }
+        setIsLoading(false);
       });
 
       return () => unsubscribe();
     }, [syncUserWithBackend]);
 
     const login = async (email: string, password: string) => {
-      try {
-        setIsLoading(true);
-        setAuthError(null);
-
-        // Authenticate with Firebase
-        await signInWithEmailAndPassword(auth, email, password);
-
-        // Token and backend sync handled by onAuthStateChanged listener
-        router.replace("/(tabs)/home");
-      } catch (error: any) {
-        console.error("Login error:", error);
-        setAuthError(error.message || "Login failed");
-        throw error;
-      } finally {
-        setIsLoading(false);
-      }
+      await signInWithEmailAndPassword(auth, email, password);
+      router.replace("/(tabs)/home");
     };
 
     const register = async (email: string, password: string, name: string) => {
-      try {
-        setIsLoading(true);
-        setAuthError(null);
-
-        // Create Firebase user
-        const { user: firebaseUser } = await createUserWithEmailAndPassword(
-          auth,
-          email,
-          password
-        );
-
-        // Update profile with name
-        await updateProfile(firebaseUser, { displayName: name });
-
-        // Token and backend sync handled by onAuthStateChanged listener
-        router.replace("/(tabs)/home");
-      } catch (error: any) {
-        console.error("Registration error:", error);
-        setAuthError(error.message || "Registration failed");
-        throw error;
-      } finally {
-        setIsLoading(false);
-      }
+      const { user: firebaseUser } = await createUserWithEmailAndPassword(
+        auth,
+        email,
+        password
+      );
+      await updateProfile(firebaseUser, { displayName: name });
+      router.replace("/(tabs)/home");
     };
 
     const logout = async () => {
-      try {
-        await signOut(auth);
-        // Clear user state and stored token immediately
-        setUser(null);
-        await AsyncStorage.removeItem("token");
-        // Navigate to login immediately instead of waiting for onAuthStateChanged
-        router.replace("/(auth)/login");
-      } catch (error) {
-        console.error("Logout failed:", error);
-        throw error;
-      }
+      await signOut(auth);
+      router.replace("/(auth)/login");
     };
 
     return {
       user,
       isLoading,
-      authError,
       login,
       register,
       logout,
     };
   }
-);
+)

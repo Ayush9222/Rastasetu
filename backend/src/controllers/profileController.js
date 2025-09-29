@@ -2,10 +2,8 @@ const User = require("../models/User");
 
 exports.getProfile = async (req, res) => {
   try {
-    const user = await User.findOne({ firebaseUid: req.userId }).select(
-      "-password"
-    );
-    if (!user) return res.status(404).json({ message: "Not found" });
+    const user = await User.findOne({ firebaseUid: req.user.uid });
+    if (!user) return res.status(404).json({ message: "User not found" });
     res.json(user);
   } catch (err) {
     console.error(err);
@@ -15,8 +13,8 @@ exports.getProfile = async (req, res) => {
 
 exports.updateProfile = async (req, res) => {
   try {
-     const user = await User.findOne({ firebaseUid: req.userId });
-    if (!user) return res.status(404).json({ message: "Not found" });
+    const user = await User.findOne({ firebaseUid: req.user.uid });
+    if (!user) return res.status(404).json({ message: "User not found" });
 
     const { name, avatar } = req.body;
     if (name) user.name = name;

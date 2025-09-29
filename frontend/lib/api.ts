@@ -1,6 +1,3 @@
-// import { auth } from "@/config/firebase";
-// import AsyncStorage from "@react-native-async-storage/async-storage";
-
 import { getAuth } from "firebase/auth";
 
 // Use environment variable or fallback for local development
@@ -111,7 +108,6 @@ export async function apiRequest(
       // If parsing fails, it might be a successful response with no body (e.g., 204 No Content)
       return null;
     }
-    
   } catch (error) {
     if (error instanceof TypeError && error.message === "Failed to fetch") {
       throw new Error("Network error. Please check your internet connection.");
@@ -133,8 +129,8 @@ export const postsApi = {
     data: {
       description: string;
       location: string;
-      image: string;
-      hashtags: string[];
+      image: string | undefined;
+      hashtags: string;
     },
     onUnauthorized?: () => void
   ) => apiRequest("/posts", { method: "POST", body: data, onUnauthorized }),
