@@ -1,16 +1,17 @@
 import createContextHook from "@nkzw/create-context-hook";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { router } from "expo-router";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { auth } from "../config/firebase";
 import {
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
   signOut,
   onAuthStateChanged,
-  UserCredential,
   updateProfile,
+  getIdToken,
 } from "firebase/auth";
+import { apiRequest } from "@/lib/api";
 
 interface User {
   id: string;
@@ -34,147 +35,115 @@ export const [AuthProvider, useAuth] = createContextHook<AuthContextType>(
   () => {
     const [user, setUser] = useState<User | null>(null);
     const [isLoading, setIsLoading] = useState(true);
+    const [authError, setAuthError] = useState<string | null>(null);
+
+    const syncUserWithBackend = useCallback(async (firebaseUser: any) => {
+      try {
+        // Get fresh ID token
+        const idToken = await getIdToken(firebaseUser, true);
+        await AsyncStorage.setItem("firebaseToken", idToken);
+
+        // Sync with backend
+        const backendResponse = await apiRequest("/auth/user", {
+          method: "POST",
+          body: {
+            name: firebaseUser.displayName,
+            avatar: firebaseUser.photoURL,
+          },
+        });
+
+        // Update local user state with merged data
+        const userData: User = {
+          id: firebaseUser.uid,
+          email: firebaseUser.email,
+          name: backendResponse.user.name || firebaseUser.displayName,
+          avatar: backendResponse.user.avatar || firebaseUser.photoURL,
+          points: backendResponse.user.points,
+          badges: backendResponse.user.badges,
+          tripsCompleted: backendResponse.user.tripsCompleted,
+        };
+
+        setUser(userData);
+        setAuthError(null);
+      } catch (error) {
+        console.error("Error syncing with backend:", error);
+        setAuthError("Error syncing user data");
+      }
+    }, []);
 
     useEffect(() => {
       console.log("Setting up auth state listener");
       const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
-        console.log(
-          "Auth state changed:",
-          firebaseUser ? "User logged in" : "No user"
-        );
         setIsLoading(true);
-        if (firebaseUser) {
-          const userData: User = {
-            id: firebaseUser.uid,
-            email: firebaseUser.email,
-            name: firebaseUser.displayName,
-            avatar: firebaseUser.photoURL || undefined,
-            points: 0,
-            badges: [],
-            tripsCompleted: 0,
-          };
-
-          // Load user data from AsyncStorage
-          try {
-            const storedData = await AsyncStorage.getItem(
-              `userData_${firebaseUser.uid}`
-            );
-            if (storedData) {
-              const { points, badges, tripsCompleted } = JSON.parse(storedData);
-              userData.points = points;
-              userData.badges = badges;
-              userData.tripsCompleted = tripsCompleted;
-            }
-          } catch (error) {
-            console.error("Error loading user data:", error);
+        try {
+          if (firebaseUser) {
+            await syncUserWithBackend(firebaseUser);
+          } else {
+            setUser(null);
+            await AsyncStorage.removeItem("firebaseToken");
           }
-
-          setUser(userData);
-        } else {
-          setUser(null);
+        } catch (error) {
+          console.error("Auth state change error:", error);
+          setAuthError("Authentication error");
+        } finally {
+          setIsLoading(false);
         }
-        setIsLoading(false);
       });
 
       return () => unsubscribe();
-    }, []);
+    }, [syncUserWithBackend]);
 
     const login = async (email: string, password: string) => {
       try {
-        const userCredential: UserCredential = await signInWithEmailAndPassword(
-          auth,
-          email,
-          password
-        );
-        const { user: firebaseUser } = userCredential;
+        setIsLoading(true);
+        setAuthError(null);
 
-        // Load or initialize user data
-        let userData = {
-          points: 0,
-          badges: [],
-          tripsCompleted: 0,
-        };
+        // Authenticate with Firebase
+        await signInWithEmailAndPassword(auth, email, password);
 
-        try {
-          const storedData = await AsyncStorage.getItem(
-            `userData_${firebaseUser.uid}`
-          );
-          if (storedData) {
-            userData = JSON.parse(storedData);
-          } else {
-            // Initialize new user data
-            await AsyncStorage.setItem(
-              `userData_${firebaseUser.uid}`,
-              JSON.stringify(userData)
-            );
-          }
-        } catch (error) {
-          console.error("Error handling user data:", error);
-        }
-
-        // Set local user state and navigate immediately to home
-        const localUser: User = {
-          id: firebaseUser.uid,
-          email: firebaseUser.email,
-          name: firebaseUser.displayName,
-          avatar: firebaseUser.photoURL || undefined,
-          points: userData.points,
-          badges: userData.badges,
-          tripsCompleted: userData.tripsCompleted,
-        };
-
-        setUser(localUser);
+        // Token and backend sync handled by onAuthStateChanged listener
         router.replace("/(tabs)/home");
       } catch (error: any) {
         console.error("Login error:", error);
-        throw new Error(error.message || "Login failed");
+        setAuthError(error.message || "Login failed");
+        throw error;
+      } finally {
+        setIsLoading(false);
       }
     };
 
     const register = async (email: string, password: string, name: string) => {
       try {
-        const userCredential: UserCredential =
-          await createUserWithEmailAndPassword(auth, email, password);
-        const { user: firebaseUser } = userCredential;
+        setIsLoading(true);
+        setAuthError(null);
+
+        // Create Firebase user
+        const { user: firebaseUser } = await createUserWithEmailAndPassword(
+          auth,
+          email,
+          password
+        );
 
         // Update profile with name
         await updateProfile(firebaseUser, { displayName: name });
 
-        // Initialize user data
-        const userData = {
-          points: 0,
-          badges: [],
-          tripsCompleted: 0,
-        };
-
-        await AsyncStorage.setItem(
-          `userData_${firebaseUser.uid}`,
-          JSON.stringify(userData)
-        );
-        // Set local user state and navigate immediately to home
-        const localUser: User = {
-          id: firebaseUser.uid,
-          email: firebaseUser.email,
-          name: name,
-          avatar: firebaseUser.photoURL || undefined,
-          points: userData.points,
-          badges: userData.badges,
-          tripsCompleted: userData.tripsCompleted,
-        };
-
-        setUser(localUser);
+        // Token and backend sync handled by onAuthStateChanged listener
         router.replace("/(tabs)/home");
       } catch (error: any) {
         console.error("Registration error:", error);
-        throw new Error(error.message || "Registration failed");
+        setAuthError(error.message || "Registration failed");
+        throw error;
+      } finally {
+        setIsLoading(false);
       }
     };
 
     const logout = async () => {
       try {
         await signOut(auth);
-        // Clear user state immediately
+        // Clear user state and stored token immediately
         setUser(null);
+        await AsyncStorage.removeItem("token");
         // Navigate to login immediately instead of waiting for onAuthStateChanged
         router.replace("/(auth)/login");
       } catch (error) {
@@ -186,6 +155,7 @@ export const [AuthProvider, useAuth] = createContextHook<AuthContextType>(
     return {
       user,
       isLoading,
+      authError,
       login,
       register,
       logout,

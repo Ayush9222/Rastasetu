@@ -22,7 +22,7 @@ export interface Post {
   id: string;
   user: User;
   location: string;
-  image: string;
+  image: string | undefined;
   description: string;
   hashtags: string;
   likes: number;
@@ -35,7 +35,7 @@ export interface CreatePostData {
   description: string;
   location: string;
   hashtags: string;
-  image: string;
+  image: string | undefined;
 }
 
 const mockPosts: Post[] = [
@@ -218,9 +218,16 @@ export const [TravelPostsProvider, useTravelPosts] = createContextHook(() => {
         base64Image = await processImageForUpload(postData.image);
       }
 
+      // const sanitizedData = {
+      //   title: postData.description.trim().split("\n")[0],
+      //   body: postData.description.trim(),
+      //   location: postData.location.trim(),
+      //   image: base64Image || undefined, // Only include if image exists
+      //   hashtags: postData.hashtags.trim(),
+      // };
+
       const sanitizedData = {
-        title: postData.description.trim().split("\n")[0],
-        body: postData.description.trim(),
+        description: postData.description,
         location: postData.location.trim(),
         image: base64Image || undefined, // Only include if image exists
         hashtags: postData.hashtags.trim(),
