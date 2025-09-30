@@ -28,7 +28,7 @@ export async function apiRequest(
     if (user && !isAuthEndpoint) {
       // Get a fresh ID token from Firebase. This handles expiration automatically.
       try {
-        token = await user.getIdToken();``
+        token = await user.getIdToken();
       } catch (tokenError) {
         console.error("Failed to get ID token:", tokenError);
         // If token fetch fails, the user session is likely invalid
