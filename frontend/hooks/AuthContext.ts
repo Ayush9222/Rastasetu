@@ -105,4 +105,4 @@ export const [AuthProvider, useAuth] = createContextHook<AuthContextType>(
       logout,
     };
   }
-)
+);

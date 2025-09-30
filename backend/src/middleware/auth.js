@@ -44,20 +44,6 @@ const verifyAuthToken = async (req, res, next) => {
   }
 };
 
-/**
- * Optional middleware to ensure email is verified
- * Use this for routes that require verified emails
- */
-const requireEmailVerified = (req, res, next) => {
-  if (!req.user?.email_verified) {
-    return res.status(403).json({
-      message: "Email verification required. Please verify your email address.",
-    });
-  }
-  next();
-};
-
 module.exports = {
   verifyAuthToken,
-  requireEmailVerified,
 };
