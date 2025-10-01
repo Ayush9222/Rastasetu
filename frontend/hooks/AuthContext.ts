@@ -1,5 +1,5 @@
 import createContextHook from "@nkzw/create-context-hook";
-import AsyncStorage from "@react-native-async-storage/async-storage";
+// import AsyncStorage from "@react-native-async-storage/async-storage";
 import { router } from "expo-router";
 import { useEffect, useState, useCallback } from "react";
 import { auth } from "../config/firebase";
@@ -9,7 +9,7 @@ import {
   signOut,
   onAuthStateChanged,
   updateProfile,
-  getIdToken,
+  // getIdToken,
 } from "firebase/auth";
 import { apiRequest } from "@/lib/api";
 

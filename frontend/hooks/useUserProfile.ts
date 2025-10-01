@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { profileApi } from "../lib/api";
 
 interface User {
@@ -21,7 +21,7 @@ export function useUserProfile() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const fetchProfile = async () => {
+  const fetchProfile = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
@@ -38,17 +38,17 @@ export function useUserProfile() {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     fetchProfile();
-  }, []);
+  }, [fetchProfile]);
 
   const updateProfile = async (updates: Partial<User>) => {
     try {
       setLoading(true);
       const updatedProfile = await profileApi.updateProfile(updates);
-      setUser((prev) => ({ ...prev, ...updatedProfile }));
+      setUser((prev) => (prev ? { ...prev, ...updatedProfile } : null));
       return updatedProfile;
     } catch (err) {
       console.error("Error updating profile:", err);

@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import createContextHook from "@nkzw/create-context-hook";
 import { postsApi } from "../lib/api";
+import { useAuth } from "./AuthContext"; // Import useAuth
 
 export interface User {
   id: string;
@@ -38,17 +39,11 @@ export interface CreatePostData {
   image: string | undefined;
 }
 
-const currentUser: User = {
-  id: "current",
-  name: "You",
-  avatar: "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150",
-  points: 750,
-};
-
 export const [TravelPostsProvider, useTravelPosts] = createContextHook(() => {
   const [posts, setPosts] = useState<Post[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const { user: currentUser } = useAuth(); // Get user from AuthContext
 
   const fetchPosts = useCallback(async () => {
     try {
@@ -145,12 +140,17 @@ export const [TravelPostsProvider, useTravelPosts] = createContextHook(() => {
       if (!commentText.trim()) {
         throw new Error("Comment cannot be empty");
       }
+      if (!currentUser) {
+        throw new Error("You must be logged in to comment");
+      }
 
       const newComment: Comment = {
         id: Date.now().toString(),
         userId: currentUser.id,
-        userName: currentUser.name,
-        userAvatar: currentUser.avatar,
+        userName: currentUser.name || "Anonymous",
+        userAvatar:
+          currentUser.avatar ||
+          "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150",
         text: commentText.trim(),
         createdAt: new Date().toISOString(),
       };
@@ -167,7 +167,7 @@ export const [TravelPostsProvider, useTravelPosts] = createContextHook(() => {
       );
       return newComment;
     },
-    []
+    [currentUser]
   );
 
   useEffect(() => {
@@ -185,6 +185,15 @@ export const [TravelPostsProvider, useTravelPosts] = createContextHook(() => {
       likePost,
       addComment,
     }),
-    [posts, loading, error, fetchPosts, createPost, likePost, addComment]
+    [
+      posts,
+      loading,
+      error,
+      currentUser,
+      fetchPosts,
+      createPost,
+      likePost,
+      addComment,
+    ]
   );
 });
