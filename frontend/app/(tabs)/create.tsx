@@ -18,23 +18,55 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import * as ImagePicker from "expo-image-picker";
 import * as Location from "expo-location";
 import { useTravelPosts } from "@/hooks/useTravelPosts";
+import * as ImageManipulator from 'expo-image-manipulator';
 
-// Helper function to process and validate image
+// Helper function to compress and process image
 const processImage = async (result: ImagePicker.ImagePickerResult) => {
     if (result.canceled || !result.assets[0]) return null;
     
     const asset = result.assets[0];
     
-    // If the image is too large (> 1MB), show an error
-    if (asset.fileSize && asset.fileSize > 1024 * 1024) {
+    try {
+        // Compress the image
+        const manipResult = await ImageManipulator.manipulateAsync(
+            asset.uri,
+            [
+                { resize: { width: 1200 } } // Resize to max width of 1200px
+            ],
+            {
+                compress: 0.7, // 70% quality
+                format: ImageManipulator.SaveFormat.JPEG
+            }
+        );
+
+        // Check the file size after compression
+        const response = await fetch(manipResult.uri);
+        const blob = await response.blob();
+        
+        // If still too large (> 2MB), compress more
+        if (blob.size > 2 * 1024 * 1024) {
+            const furtherCompressed = await ImageManipulator.manipulateAsync(
+                manipResult.uri,
+                [
+                    { resize: { width: 800 } }
+                ],
+                {
+                    compress: 0.5,
+                    format: ImageManipulator.SaveFormat.JPEG
+                }
+            );
+            return furtherCompressed.uri;
+        }
+        
+        return manipResult.uri;
+    } catch (error) {
+        console.error('Error processing image:', error);
         Alert.alert(
-            "Image Too Large",
-            "Please select an image smaller than 1MB or try taking a new photo with lower quality."
+            "Image Processing Error",
+            "Failed to process the image. Please try another one."
         );
         return null;
     }
-    
-    return asset.uri;
 };
 
 export default function CreatePostScreen() {
@@ -47,6 +79,7 @@ export default function CreatePostScreen() {
     const [modalMessage, setModalMessage] = useState("");
     const [isPosting, setIsPosting] = useState(false);
     const [isLoadingLocation, setIsLoadingLocation] = useState(false);
+    const [isProcessingImage, setIsProcessingImage] = useState(false);
     const insets = useSafeAreaInsets();
     const { createPost } = useTravelPosts();
 
@@ -75,11 +108,12 @@ export default function CreatePostScreen() {
         if (!hasPermissions) return;
 
         try {
+            setIsProcessingImage(true);
             const result = await ImagePicker.launchImageLibraryAsync({
-                mediaTypes: ImagePicker.MediaTypeOptions.Images,
+                mediaTypes: ['images'],
                 allowsEditing: true,
                 aspect: [4, 3],
-                quality: 0.5,
+                quality: 0.8,
             });
 
             const processedUri = await processImage(result);
@@ -91,6 +125,8 @@ export default function CreatePostScreen() {
             setModalType("error");
             setModalMessage("Failed to select image. Please try again.");
             setShowModal(true);
+        } finally {
+            setIsProcessingImage(false);
         }
     };
 
@@ -99,10 +135,11 @@ export default function CreatePostScreen() {
         if (!hasPermissions) return;
 
         try {
+            setIsProcessingImage(true);
             const result = await ImagePicker.launchCameraAsync({
                 allowsEditing: true,
                 aspect: [4, 3],
-                quality: 0.5,
+                quality: 0.8,
             });
 
             const processedUri = await processImage(result);
@@ -114,6 +151,8 @@ export default function CreatePostScreen() {
             setModalType("error");
             setModalMessage("Failed to take photo. Please try again.");
             setShowModal(true);
+        } finally {
+            setIsProcessingImage(false);
         }
     };
 
@@ -180,13 +219,6 @@ export default function CreatePostScreen() {
 
         setIsPosting(true);
         try {
-            // Check file size again before uploading
-            const response = await fetch(selectedImage);
-            const blob = await response.blob();
-            if (blob.size > 1024 * 1024) { // 1MB
-                throw new Error("Image file is too large. Please choose a smaller image or reduce the quality.");
-            }
-
             await createPost({
                 description: description.trim(),
                 location: location.trim(),
@@ -240,7 +272,12 @@ export default function CreatePostScreen() {
             </View>
 
             <ScrollView style={styles.content}>
-                {selectedImage ? (
+                {isProcessingImage ? (
+                    <View style={styles.processingContainer}>
+                        <ActivityIndicator size="large" color="#22c55e" />
+                        <Text style={styles.processingText}>Processing image...</Text>
+                    </View>
+                ) : selectedImage ? (
                     <View style={styles.imageContainer}>
                         <Image source={{ uri: selectedImage }} style={styles.selectedImage} />
                         <TouchableOpacity
@@ -299,7 +336,7 @@ export default function CreatePostScreen() {
                         <Hash color="#22c55e" size={20} />
                         <TextInput
                             style={styles.input}
-                            placeholder="Add hashtags..."
+                            placeholder="Add hashtags (e.g., #travel #adventure)"
                             placeholderTextColor="#6b7280"
                             value={hashtags}
                             onChangeText={setHashtags}
@@ -381,18 +418,34 @@ const styles = StyleSheet.create({
         fontWeight: "600",
         color: "#ffffff",
     },
+    postButtonDisabled: {
+        backgroundColor: "#6b7280",
+    },
     content: {
         flex: 1,
         padding: 20,
     },
+    processingContainer: {
+        backgroundColor: "#1f2937",
+        borderRadius: 12,
+        height: 200,
+        justifyContent: "center",
+        alignItems: "center",
+        marginBottom: 24,
+    },
+    processingText: {
+        fontSize: 16,
+        color: "#6b7280",
+        marginTop: 12,
+    },
     imageSelector: {
+        flex: 1,
         marginBottom: 24,
     },
     selectedImage: {
         width: "100%",
         height: 200,
         borderRadius: 12,
-        resizeMode: "cover",
     },
     imagePlaceholder: {
         backgroundColor: "#1f2937",
@@ -523,8 +576,5 @@ const styles = StyleSheet.create({
         fontSize: 12,
         color: "#ffffff",
         fontWeight: "500",
-    },
-    postButtonDisabled: {
-        backgroundColor: "#6b7280",
     },
 });
