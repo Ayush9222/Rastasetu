@@ -1,4 +1,4 @@
-import { getAuth } from "firebase/auth";
+import { auth } from "../config/firebase";
 
 // Use environment variable or fallback for local development
 const API_URL = process.env.EXPO_PUBLIC_API_URL || "http://localhost:5000/api";
@@ -16,17 +16,16 @@ export async function apiRequest(
   options: ApiRequestOptions = {}
 ) {
   try {
-    const auth = getAuth();
+    // const auth = getAuth();
     const user = auth.currentUser;
-    const isAuthEndpoint =
-      endpoint.startsWith("/auth") ||
-      endpoint === "/auth/login" ||
-      endpoint === "/auth/register";
+
+    // Define public endpoints that DO NOT require a token
+    const publicEndpoints = ["/auth/login", "/auth/register"];
 
     let token: string | null = null;
 
-    if (user && !isAuthEndpoint) {
-      // Get a fresh ID token from Firebase. This handles expiration automatically.
+    // If there is a user and the endpoint is NOT public, get the token.
+    if (user && !publicEndpoints.includes(endpoint)) {
       try {
         token = await user.getIdToken();
       } catch (tokenError) {
@@ -37,9 +36,6 @@ export async function apiRequest(
         }
         throw new Error("User session invalid. Please log in again.");
       }
-    } else if (!isAuthEndpoint) {
-      // If no Firebase user and it's not an auth endpoint, the user is not authenticated.
-      throw new Error("User not authenticated.");
     }
 
     const { method = "GET", body } = options;

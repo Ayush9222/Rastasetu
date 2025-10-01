@@ -17,7 +17,7 @@ const PORT = process.env.PORT || 5000;
 // Register middleware and routes before starting the server
 app.use(
   cors({
-    origin: process.env.ALLOWED_ORIGINS.split(","),
+    origin: [process.env.ALLOWED_ORIGINS, true],
   })
 );
 app.use(express.json({ limit: "10mb" }));
