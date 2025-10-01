@@ -46,7 +46,7 @@ const postSchema = new mongoose.Schema({
     required: true,
   },
   hashtags: {
-    type: [String], // Changed to an array of strings for better querying
+    type: String, // Changed to a single String
     required: true,
   },
   likes: {

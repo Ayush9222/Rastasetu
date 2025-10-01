@@ -24,9 +24,10 @@ const verifyAuthToken = async (req, res, next) => {
       uid: decodedToken.uid,
       email: decodedToken.email,
       email_verified: decodedToken.email_verified,
+      name: decodedToken.name || null,
       picture: decodedToken.picture || decodedToken.photoURL || null,
     };
-    req.userId = decodedToken.uid; // For compatibility with existing controllers
+    // req.userId = decodedToken.uid; // For compatibility with existing controllers
 
     next();
   } catch (error) {
