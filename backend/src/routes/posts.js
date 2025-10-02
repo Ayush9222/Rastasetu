@@ -8,5 +8,6 @@ router.post("/", verifyAuthToken, postsController.createPost);
 router.get("/:id", verifyAuthToken, postsController.getPost);
 router.put("/:id", verifyAuthToken, postsController.updatePost);
 router.delete("/:id", verifyAuthToken, postsController.deletePost);
+router.post("/:id/like", verifyAuthToken, postsController.likePost);
 
 module.exports = router;

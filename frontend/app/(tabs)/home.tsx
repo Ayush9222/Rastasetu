@@ -91,6 +91,7 @@ export default function HomeScreen() {
       <Image
         source={{ uri: comment.userAvatar }}
         style={styles.commentAvatar}
+        resizeMode="cover"
       />
       <View style={styles.commentContent}>
         <Text style={styles.commentUsername}>{comment.userName}</Text>
@@ -106,7 +107,11 @@ export default function HomeScreen() {
     return (
       <View key={post.id} style={styles.postContainer}>
         <View style={styles.postHeader}>
-          <Image source={{ uri: post.user.avatar }} style={styles.avatar} />
+          <Image
+            source={{ uri: post.user.avatar }}
+            style={styles.avatar}
+            resizeMode="cover"
+          />
           <View style={styles.userInfo}>
             <Text style={styles.username}>{post.user.name}</Text>
             <View style={styles.locationContainer}>
@@ -119,7 +124,13 @@ export default function HomeScreen() {
           </View>
         </View>
 
-        <Image source={{ uri: post.image }} style={styles.postImage} />
+        <View style={styles.postImageContainer}>
+          <Image
+            source={{ uri: post.image }}
+            style={styles.postImage}
+            resizeMode="cover"
+          />
+        </View>
 
         <View style={styles.postActions}>
           <TouchableOpacity
@@ -233,7 +244,7 @@ export default function HomeScreen() {
         </TouchableOpacity>
       </View>
       <ScrollView style={styles.feed} showsVerticalScrollIndicator={false}>
-        {posts.map(renderPost)}
+        {posts.map((post) => renderPost(post))}
       </ScrollView>
 
       <Modal
@@ -303,6 +314,7 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
+    backgroundColor: "#374151",
   },
   userInfo: {
     flex: 1,
@@ -334,10 +346,15 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     color: "#ffffff",
   },
+  postImageContainer: {
+    width: "100%",
+    height: 350,
+    backgroundColor: "#374151",
+    overflow: "hidden",
+  },
   postImage: {
     width: "100%",
-    height: 300,
-    resizeMode: "cover",
+    height: "100%",
   },
   postActions: {
     flexDirection: "row",
@@ -410,6 +427,7 @@ const styles = StyleSheet.create({
     width: 32,
     height: 32,
     borderRadius: 16,
+    backgroundColor: "#374151",
   },
   commentContent: {
     flex: 1,

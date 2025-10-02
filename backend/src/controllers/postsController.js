@@ -1,4 +1,3 @@
-// backend/src/controllers/postsController.js
 const Post = require("../models/Post");
 const User = require("../models/User");
 const cloudinary = require("../config/cloudinary");
@@ -6,7 +5,6 @@ const cloudinary = require("../config/cloudinary");
 // Helper function to upload base64 image to Cloudinary
 const uploadToCloudinary = async (base64Image) => {
   try {
-    // Check if image is already a URL (in case of updates where image hasn't changed)
     if (
       base64Image.startsWith("http://") ||
       base64Image.startsWith("https://")
@@ -14,12 +12,10 @@ const uploadToCloudinary = async (base64Image) => {
       return base64Image;
     }
 
-    // Add data URI prefix if not present
     const base64Data = base64Image.startsWith("data:image")
       ? base64Image
       : `data:image/jpeg;base64,${base64Image}`;
 
-    // Upload to Cloudinary with optimizations
     const result = await cloudinary.uploader.upload(base64Data, {
       folder: "travel-posts",
       resource_type: "image",
@@ -40,72 +36,84 @@ const uploadToCloudinary = async (base64Image) => {
 // Helper function to delete image from Cloudinary
 const deleteFromCloudinary = async (imageUrl) => {
   try {
-    // Only delete if it's a Cloudinary URL
     if (!imageUrl || !imageUrl.includes("cloudinary.com")) {
       return;
     }
 
-    // Extract public_id from URL
-    // URL format: https://res.cloudinary.com/cloud_name/image/upload/v123456/folder/public_id.jpg
     const urlParts = imageUrl.split("/");
     const uploadIndex = urlParts.indexOf("upload");
 
     if (uploadIndex === -1) return;
 
-    // Get everything after 'upload/v123456/'
     const publicIdWithFolder = urlParts.slice(uploadIndex + 2).join("/");
-    const publicId = publicIdWithFolder.split(".")[0]; // Remove extension
+    const publicId = publicIdWithFolder.split(".")[0];
 
     await cloudinary.uploader.destroy(publicId);
     console.log("Deleted image from Cloudinary:", publicId);
   } catch (error) {
     console.error("Cloudinary delete error:", error);
-    // Don't throw error - deletion failure shouldn't break the request
   }
+};
+
+// Helper function to transform post to response format
+const transformPostToResponse = (post) => {
+  return {
+    id: post._id.toString(),
+    user: {
+      id: post.user._id.toString(),
+      name: post.user.name,
+      email: post.user.email,
+      avatar: post.user.avatar,
+      points: post.user.points || 0,
+    },
+    location: post.location,
+    image: post.image,
+    description: post.description,
+    hashtags: post.hashtags,
+    likes: post.likes,
+    comments: post.comments.map((comment) => ({
+      id: comment._id.toString(),
+      userId: comment.userId.toString(),
+      userName: comment.userName,
+      userAvatar: comment.userAvatar,
+      text: comment.text,
+      createdAt: comment.createdAt,
+    })),
+    isLiked: post.isLiked,
+    createdAt: post.createdAt,
+  };
 };
 
 exports.createPost = async (req, res) => {
   try {
     const { image, description, hashtags, location } = req.body;
 
-    // Find the user document by Firebase UID
     const user = await User.findOne({ firebaseUid: req.user.uid });
 
     if (!user) {
       return res.status(404).json({ message: "User not found" });
     }
 
-    // Validate required fields
     if (!description || !description.trim()) {
-      return res.status(400).json({
-        message: "Description is required",
-      });
+      return res.status(400).json({ message: "Description is required" });
     }
 
     if (!location || !location.trim()) {
-      return res.status(400).json({
-        message: "Location is required",
-      });
+      return res.status(400).json({ message: "Location is required" });
     }
 
     if (!hashtags || !hashtags.trim()) {
-      return res.status(400).json({
-        message: "Hashtags are required",
-      });
+      return res.status(400).json({ message: "Hashtags are required" });
     }
 
     if (!image) {
-      return res.status(400).json({
-        message: "Image is required",
-      });
+      return res.status(400).json({ message: "Image is required" });
     }
 
-    // Upload image to Cloudinary
     console.log("Uploading image to Cloudinary...");
     const imageUrl = await uploadToCloudinary(image);
     console.log("Image uploaded successfully:", imageUrl);
 
-    // Create post with Cloudinary URL
     const post = new Post({
       user: user._id,
       image: imageUrl,
@@ -115,12 +123,10 @@ exports.createPost = async (req, res) => {
     });
 
     await post.save();
-
-    // Populate user details before sending response
-    await post.populate("user", "name email avatar");
+    await post.populate("user", "name email avatar points");
 
     console.log("Post created successfully:", post._id);
-    res.status(201).json(post);
+    res.status(201).json(transformPostToResponse(post));
   } catch (err) {
     console.error("Create post error:", err);
     res.status(500).json({
@@ -132,11 +138,37 @@ exports.createPost = async (req, res) => {
 exports.getPosts = async (req, res) => {
   try {
     const posts = await Post.find()
-      .populate("user", "name email avatar")
+      .populate("user", "name email avatar points")
       .sort({ createdAt: -1 })
-      .lean(); // Use lean() for better performance
+      .lean();
 
-    res.json(posts);
+    const transformedPosts = posts.map((post) => ({
+      id: post._id.toString(),
+      user: {
+        id: post.user._id.toString(),
+        name: post.user.name,
+        email: post.user.email,
+        avatar: post.user.avatar,
+        points: post.user.points || 0,
+      },
+      location: post.location,
+      image: post.image,
+      description: post.description,
+      hashtags: post.hashtags,
+      likes: post.likes,
+      comments: post.comments.map((comment) => ({
+        id: comment._id.toString(),
+        userId: comment.userId.toString(),
+        userName: comment.userName,
+        userAvatar: comment.userAvatar,
+        text: comment.text,
+        createdAt: comment.createdAt,
+      })),
+      isLiked: post.isLiked,
+      createdAt: post.createdAt,
+    }));
+
+    res.json(transformedPosts);
   } catch (err) {
     console.error("Get posts error:", err);
     res.status(500).json({ message: "Failed to fetch posts" });
@@ -146,18 +178,17 @@ exports.getPosts = async (req, res) => {
 exports.getPost = async (req, res) => {
   try {
     const post = await Post.findById(req.params.id)
-      .populate("user", "name email avatar")
+      .populate("user", "name email avatar points")
       .lean();
 
     if (!post) {
       return res.status(404).json({ message: "Post not found" });
     }
 
-    res.json(post);
+    res.json(transformPostToResponse(post));
   } catch (err) {
     console.error("Get post error:", err);
 
-    // Handle invalid ObjectId
     if (err.kind === "ObjectId") {
       return res.status(400).json({ message: "Invalid post ID" });
     }
@@ -176,28 +207,22 @@ exports.updatePost = async (req, res) => {
       return res.status(404).json({ message: "Post not found" });
     }
 
-    // Find the user document by Firebase UID
     const user = await User.findOne({ firebaseUid: req.user.uid });
 
     if (!user) {
       return res.status(404).json({ message: "User not found" });
     }
 
-    // Check ownership
     if (post.user.toString() !== user._id.toString()) {
       return res
         .status(403)
         .json({ message: "You don't have permission to update this post" });
     }
 
-    // Update image if provided and different from current
     if (image && image !== post.image) {
       console.log("Updating post image...");
-
-      // Upload new image to Cloudinary
       const newImageUrl = await uploadToCloudinary(image);
 
-      // Delete old image from Cloudinary (after successful upload)
       if (post.image) {
         await deleteFromCloudinary(post.image);
       }
@@ -206,16 +231,15 @@ exports.updatePost = async (req, res) => {
       console.log("Image updated successfully");
     }
 
-    // Update other fields if provided
     if (description) post.description = description.trim();
     if (hashtags) post.hashtags = hashtags.trim();
     if (location) post.location = location.trim();
 
     await post.save();
-    await post.populate("user", "name email avatar");
+    await post.populate("user", "name email avatar points");
 
     console.log("Post updated successfully:", post._id);
-    res.json(post);
+    res.json(transformPostToResponse(post));
   } catch (err) {
     console.error("Update post error:", err);
 
@@ -237,21 +261,18 @@ exports.deletePost = async (req, res) => {
       return res.status(404).json({ message: "Post not found" });
     }
 
-    // Find the user document by Firebase UID
     const user = await User.findOne({ firebaseUid: req.user.uid });
 
     if (!user) {
       return res.status(404).json({ message: "User not found" });
     }
 
-    // Check ownership
     if (post.user.toString() !== user._id.toString()) {
       return res
         .status(403)
         .json({ message: "You don't have permission to delete this post" });
     }
 
-    // Delete image from Cloudinary
     if (post.image) {
       console.log("Deleting image from Cloudinary...");
       await deleteFromCloudinary(post.image);
@@ -272,5 +293,35 @@ exports.deletePost = async (req, res) => {
     }
 
     res.status(500).json({ message: "Failed to delete post" });
+  }
+};
+
+exports.likePost = async (req, res) => {
+  try {
+    const post = await Post.findById(req.params.id);
+
+    if (!post) {
+      return res.status(404).json({ message: "Post not found" });
+    }
+
+    // Toggle like
+    post.isLiked = !post.isLiked;
+    post.likes = post.isLiked ? post.likes + 1 : post.likes - 1;
+
+    await post.save();
+
+    res.json({
+      success: true,
+      isLiked: post.isLiked,
+      likes: post.likes,
+    });
+  } catch (err) {
+    console.error("Like post error:", err);
+
+    if (err.kind === "ObjectId") {
+      return res.status(400).json({ message: "Invalid post ID" });
+    }
+
+    res.status(500).json({ message: "Failed to like post" });
   }
 };
